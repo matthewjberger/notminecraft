@@ -1,10 +1,18 @@
 use anyhow::Result;
 use gl::types::*;
-use glutin::event::{Event, VirtualKeyCode};
+use glutin::{
+    dpi::PhysicalPosition,
+    event::{Event, VirtualKeyCode},
+    window::Window,
+};
 use nalgebra_glm as glm;
 use std::{ffi::CString, fs};
 
-use crate::{input::Input, system::System};
+use crate::{
+    camera::{CameraDirection, FreeCamera},
+    input::Input,
+    system::System,
+};
 
 #[rustfmt::skip]
 pub const VERTICES: &[f32; 24] =
@@ -51,6 +59,7 @@ pub struct App {
     shader_program: GLuint,
     mvp: glm::Mat4,
     angle: f32,
+    camera: FreeCamera,
     pub system: System,
     pub input: Input,
 }
@@ -64,6 +73,7 @@ impl App {
             shader_program: Self::create_shader_program()?,
             mvp: glm::Mat4::identity(),
             angle: 0.0,
+            camera: FreeCamera::default(),
             system: System::new(dimensions),
             input: Input::default(),
         })
@@ -179,10 +189,12 @@ impl App {
         Ok(())
     }
 
-    pub fn update(&mut self) -> Result<()> {
+    pub fn update(&mut self, window: &Window) -> Result<()> {
         if self.input.is_key_pressed(VirtualKeyCode::Escape) {
             self.system.exit_requested = true;
         }
+
+        self.update_free_camera(window)?;
 
         self.angle += 10.0 * self.system.delta_time as f32;
         let perspective = glm::perspective_zo(
@@ -196,12 +208,7 @@ impl App {
             self.angle.to_radians(),
             &glm::Vec3::y(),
         );
-        let view = glm::look_at(
-            &glm::vec3(0.0, 0.0, -4.0),
-            &glm::vec3(0.0, 0.0, 0.0),
-            &glm::Vec3::y(),
-        );
-        self.mvp = perspective * view * model;
+        self.mvp = perspective * self.camera.view_matrix() * model;
         Ok(())
     }
 
@@ -250,5 +257,36 @@ impl App {
             gl::DeleteBuffers(1, &self.ebo as *const u32);
             gl::DeleteProgram(self.shader_program);
         }
+    }
+
+    fn update_free_camera(&mut self, window: &Window) -> Result<()> {
+        let delta_time = self.system.delta_time as f32;
+        if self.input.is_key_pressed(VirtualKeyCode::W) {
+            self.camera.translate(CameraDirection::Forward, delta_time);
+        }
+        if self.input.is_key_pressed(VirtualKeyCode::A) {
+            self.camera.translate(CameraDirection::Left, delta_time);
+        }
+        if self.input.is_key_pressed(VirtualKeyCode::S) {
+            self.camera.translate(CameraDirection::Backward, delta_time);
+        }
+        if self.input.is_key_pressed(VirtualKeyCode::D) {
+            self.camera.translate(CameraDirection::Right, delta_time);
+        }
+        if self.input.is_key_pressed(VirtualKeyCode::LShift) {
+            self.camera.translate(CameraDirection::Down, delta_time);
+        }
+        if self.input.is_key_pressed(VirtualKeyCode::Space) {
+            self.camera.translate(CameraDirection::Up, delta_time);
+        }
+        let offset = self.input.mouse.offset_from_center;
+        self.camera.process_mouse_movement(offset.x, offset.y);
+
+        window.set_cursor_grab(true)?;
+        window.set_cursor_visible(false);
+        let center = self.system.window_center();
+        window.set_cursor_position(PhysicalPosition::new(center.x, center.y))?;
+
+        Ok(())
     }
 }

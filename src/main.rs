@@ -7,6 +7,7 @@ use glutin::{
 };
 
 mod app;
+mod camera;
 mod input;
 mod system;
 
@@ -40,7 +41,7 @@ fn main() -> Result<()> {
 
             match event {
                 Event::MainEventsCleared => {
-                    app.update()?;
+                    app.update(gl_window.window())?;
                     app.render()?;
                     gl_window.swap_buffers()?
                 }
