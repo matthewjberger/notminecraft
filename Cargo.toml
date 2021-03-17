@@ -1,0 +1,11 @@
+[package]
+name = "notminecraft"
+version = "0.1.0"
+authors = ["Matthew J. Berger <matthewberger@nevada.unr.edu>"]
+edition = "2018"
+
+[dependencies]
+glutin = "0.26.0"
+gl = "0.14.0"
+anyhow = "1.0.38"
+nalgebra-glm = "0.11.0"
