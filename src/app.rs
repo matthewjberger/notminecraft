@@ -1,8 +1,10 @@
 use anyhow::Result;
 use gl::types::*;
-use glutin::event::Event;
+use glutin::event::{Event, VirtualKeyCode};
 use nalgebra_glm as glm;
 use std::{ffi::CString, fs};
+
+use crate::{input::Input, system::System};
 
 #[rustfmt::skip]
 pub const VERTICES: &[f32; 24] =
@@ -49,11 +51,12 @@ pub struct App {
     shader_program: GLuint,
     mvp: glm::Mat4,
     angle: f32,
-    pub aspect_ratio: f32,
+    pub system: System,
+    pub input: Input,
 }
 
 impl App {
-    pub fn new(aspect_ratio: f32) -> Result<Self> {
+    pub fn new(dimensions: [u32; 2]) -> Result<Self> {
         Ok(Self {
             vao: Self::create_vao(),
             vbo: Self::create_vbo(),
@@ -61,7 +64,8 @@ impl App {
             shader_program: Self::create_shader_program()?,
             mvp: glm::Mat4::identity(),
             angle: 0.0,
-            aspect_ratio,
+            system: System::new(dimensions),
+            input: Input::default(),
         })
     }
 
@@ -175,10 +179,18 @@ impl App {
         Ok(())
     }
 
-    // TODO: add delta time
     pub fn update(&mut self) -> Result<()> {
-        self.angle += 0.01;
-        let perspective = glm::perspective_zo(self.aspect_ratio, 80_f32.to_radians(), 0.01, 1000.0);
+        if self.input.is_key_pressed(VirtualKeyCode::Escape) {
+            self.system.exit_requested = true;
+        }
+
+        self.angle += 10.0 * self.system.delta_time as f32;
+        let perspective = glm::perspective_zo(
+            self.system.aspect_ratio(),
+            80_f32.to_radians(),
+            0.01,
+            1000.0,
+        );
         let model = glm::rotate(
             &glm::Mat4::identity(),
             self.angle.to_radians(),
@@ -193,7 +205,9 @@ impl App {
         Ok(())
     }
 
-    pub fn handle_events(&mut self, _event: &Event<()>) -> Result<()> {
+    pub fn handle_events(&mut self, event: &Event<()>) -> Result<()> {
+        self.system.handle_event(event);
+        self.input.handle_event(event, self.system.window_center());
         Ok(())
     }
 

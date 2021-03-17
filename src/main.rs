@@ -1,12 +1,14 @@
 use anyhow::Result;
 use glutin::{
-    event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
+    event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
     ContextBuilder,
 };
 
 mod app;
+mod input;
+mod system;
 
 use app::App;
 
@@ -24,16 +26,20 @@ fn main() -> Result<()> {
     gl::load_with(|symbol| gl_window.get_proc_address(symbol));
 
     let dimensions = gl_window.window().inner_size();
-    let aspect_ratio = dimensions.width as f32 / std::cmp::max(dimensions.height, 1) as f32;
-    let mut app = App::new(aspect_ratio)?;
+    let mut app = App::new([dimensions.width, dimensions.height])?;
 
     event_loop.run(move |event, _, control_flow| {
         let result = || -> Result<()> {
             *control_flow = ControlFlow::Poll;
 
+            if app.system.exit_requested {
+                *control_flow = ControlFlow::Exit;
+            }
+
+            app.handle_events(&event)?;
+
             match event {
                 Event::MainEventsCleared => {
-                    app.handle_events(&event)?;
                     app.update()?;
                     app.render()?;
                     gl_window.swap_buffers()?
@@ -43,26 +49,9 @@ fn main() -> Result<()> {
                     return Ok(());
                 }
                 Event::WindowEvent { event, .. } => match event {
-                    WindowEvent::Resized(dimensions) => {
-                        app.aspect_ratio =
-                            dimensions.width as f32 / std::cmp::max(dimensions.height, 1) as f32;
-                        unsafe {
-                            gl::Viewport(0, 0, dimensions.width as _, dimensions.height as _);
-                        }
-                    }
-                    WindowEvent::KeyboardInput {
-                        input:
-                            KeyboardInput {
-                                state,
-                                virtual_keycode: Some(keycode),
-                                ..
-                            },
-                        ..
-                    } => {
-                        if (keycode, state) == (VirtualKeyCode::Escape, ElementState::Pressed) {
-                            *control_flow = ControlFlow::Exit;
-                        }
-                    }
+                    WindowEvent::Resized(dimensions) => unsafe {
+                        gl::Viewport(0, 0, dimensions.width as _, dimensions.height as _);
+                    },
                     WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
                     _ => (),
                 },
