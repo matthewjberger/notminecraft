@@ -10,6 +10,7 @@ mod app;
 mod camera;
 mod input;
 mod system;
+mod texture;
 
 use app::App;
 
