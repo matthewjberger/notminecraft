@@ -1,17 +1,15 @@
 #version 450 core
 
 layout (location = 0) in vec3 v_position;
+layout (location = 1) in vec2 v_uv;
 
 uniform mat4 mvp;
 
-out VS_OUT
-{
-  vec4 color;
-} vs_out;
+out vec2 uv;
 
 void main()
 {
     vec4 position = vec4(v_position, 1.0);
     gl_Position = mvp * position;
-    vs_out.color = position * 2.0 + vec4(0.5, 0.5, 0.5, 1.0);
+    uv = v_uv;
 }

@@ -2,13 +2,11 @@
 
 out vec4 outColor;
 
-in VS_OUT
-{
-  vec4 color;
-} fs_in;
+in vec2 uv;
 
+uniform sampler2D tex;
 
 void main()
 {
-  outColor = fs_in.color;
+  outColor = texture(tex, uv);
 }

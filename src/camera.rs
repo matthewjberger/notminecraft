@@ -44,20 +44,6 @@ impl FreeCamera {
         camera
     }
 
-    pub fn position_at(&mut self, position: &glm::Vec3) {
-        self.position = *position;
-        self.calculate_vectors();
-    }
-
-    pub fn look_at(&mut self, target: &glm::Vec3) {
-        self.front = (target - self.position).normalize();
-        self.pitch_degrees = self.front.y.asin().to_degrees();
-        self.yaw_degrees = (self.front.x / self.front.y.asin().cos())
-            .acos()
-            .to_degrees();
-        self.calculate_vectors();
-    }
-
     pub fn view_matrix(&self) -> glm::Mat4 {
         let target = self.position + self.front;
         glm::look_at(&self.position, &target, &self.up)
@@ -102,9 +88,5 @@ impl FreeCamera {
         .normalize();
         self.right = self.front.cross(&self.world_up).normalize();
         self.up = self.right.cross(&self.front).normalize();
-    }
-
-    pub fn position(&self) -> &glm::Vec3 {
-        &self.position
     }
 }

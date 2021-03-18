@@ -5,58 +5,21 @@ use glutin::{
     event::{Event, VirtualKeyCode},
     window::Window,
 };
+use image::{EncodableLayout, GenericImageView};
 use nalgebra_glm as glm;
 use std::{ffi::CString, fs};
 
 use crate::{
     camera::{CameraDirection, FreeCamera},
+    cube::Cube,
     input::Input,
     system::System,
 };
 
-#[rustfmt::skip]
-pub const VERTICES: &[f32; 24] =
-    &[
-        // Front
-       -0.5, -0.5,  0.5,
-        0.5, -0.5,  0.5,
-        0.5,  0.5,  0.5,
-       -0.5,  0.5,  0.5,
-        // Back
-       -0.5, -0.5, -0.5,
-        0.5, -0.5, -0.5,
-        0.5,  0.5, -0.5,
-       -0.5,  0.5, -0.5
-    ];
-
-#[rustfmt::skip]
-pub const INDICES: &[u32; 36] =
-    &[
-        // Front
-        0, 1, 2,
-        2, 3, 0,
-        // Right
-        1, 5, 6,
-        6, 2, 1,
-        // Back
-        7, 6, 5,
-        5, 4, 7,
-        // Left
-        4, 0, 3,
-        3, 7, 4,
-        // Bottom
-        4, 5, 1,
-        1, 0, 4,
-        // Top
-        3, 2, 6,
-        6, 7, 3,
-    ];
-
 pub struct App {
-    vao: GLuint,
-    vbo: GLuint,
-    ebo: GLuint,
+    cube: Cube,
     shader_program: GLuint,
+    atlas: GLuint,
     mvp: glm::Mat4,
     angle: f32,
     camera: FreeCamera,
@@ -67,10 +30,9 @@ pub struct App {
 impl App {
     pub fn new(dimensions: [u32; 2]) -> Result<Self> {
         Ok(Self {
-            vao: Self::create_vao(),
-            vbo: Self::create_vbo(),
-            ebo: Self::create_ebo(),
+            cube: Cube::new(),
             shader_program: Self::create_shader_program()?,
+            atlas: Self::create_atlas()?,
             mvp: glm::Mat4::identity(),
             angle: 0.0,
             camera: FreeCamera::default(),
@@ -79,52 +41,11 @@ impl App {
         })
     }
 
-    fn create_vao() -> GLuint {
-        let mut vao = 0;
+    #[allow(dead_code)]
+    pub fn enable_wireframe() {
         unsafe {
-            gl::GenVertexArrays(1, &mut vao);
-            gl::BindVertexArray(vao);
+            gl::PolygonMode(gl::FRONT_AND_BACK, gl::LINE);
         }
-        vao
-    }
-
-    fn create_vbo() -> GLuint {
-        let vertices_size = std::mem::size_of::<GLfloat>() * VERTICES.len();
-        let vertex_bytes =
-            unsafe { std::slice::from_raw_parts(VERTICES.as_ptr() as *const u8, vertices_size) };
-        let mut vbo = 0;
-        let offset = std::mem::size_of::<GLfloat>() as i32;
-        unsafe {
-            gl::GenBuffers(1, &mut vbo);
-            gl::BindBuffer(gl::ARRAY_BUFFER, vbo as _);
-            gl::BufferData(
-                gl::ARRAY_BUFFER,
-                vertices_size as GLsizeiptr,
-                vertex_bytes.as_ptr() as *const GLvoid,
-                gl::STATIC_DRAW,
-            );
-            gl::EnableVertexAttribArray(0);
-            gl::VertexAttribPointer(0, 3, gl::FLOAT, gl::FALSE, 3 * offset, 0 as *const GLvoid);
-        };
-        vbo
-    }
-
-    fn create_ebo() -> GLuint {
-        let indices_size = std::mem::size_of::<GLuint>() * INDICES.len();
-        let index_bytes =
-            unsafe { std::slice::from_raw_parts(INDICES.as_ptr() as *const u8, indices_size) };
-        let mut ebo = 0;
-        unsafe {
-            gl::GenBuffers(1, &mut ebo);
-            gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo as _);
-            gl::BufferData(
-                gl::ELEMENT_ARRAY_BUFFER,
-                indices_size as GLsizeiptr,
-                index_bytes.as_ptr() as *const GLvoid,
-                gl::STATIC_DRAW,
-            );
-        };
-        ebo
     }
 
     fn create_shader_program() -> Result<GLuint> {
@@ -189,6 +110,39 @@ impl App {
         Ok(())
     }
 
+    fn create_atlas() -> Result<GLuint> {
+        let img_ = image::open("assets/textures/atlas.png")?;
+        img_.flipv();
+
+        let row = 0;
+        let column = 2;
+        let dimension = 16;
+        let img = img_.view(row, column, dimension, dimension).to_image();
+
+        let mut atlas = 0;
+        unsafe {
+            gl::GenTextures(1, &mut atlas);
+            gl::ActiveTexture(gl::TEXTURE0);
+            gl::BindTexture(gl::TEXTURE_2D, atlas);
+            gl::TexImage2D(
+                gl::TEXTURE_2D,
+                0,
+                gl::RGBA as _,
+                img.width() as _,
+                img.height() as _,
+                0,
+                gl::RGBA,
+                gl::UNSIGNED_BYTE,
+                img.as_bytes().as_ptr() as *const GLvoid,
+            );
+            gl::GenerateMipmap(atlas);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
+        }
+
+        Ok(atlas)
+    }
+
     pub fn update(&mut self, window: &Window) -> Result<()> {
         if self.input.is_key_pressed(VirtualKeyCode::Escape) {
             self.system.exit_requested = true;
@@ -232,16 +186,13 @@ impl App {
 
             gl::UseProgram(self.shader_program);
 
+            gl::ActiveTexture(gl::TEXTURE0);
+            gl::BindTexture(gl::TEXTURE_2D, self.atlas);
+
             let location = Self::uniform_location(self.shader_program, "mvp")?;
             gl::UniformMatrix4fv(location, 1, gl::FALSE, self.mvp.as_ptr());
 
-            gl::BindVertexArray(self.vao);
-            gl::DrawElements(
-                gl::TRIANGLES,
-                INDICES.len() as i32,
-                gl::UNSIGNED_INT,
-                std::ptr::null(),
-            );
+            self.cube.draw();
         }
         Ok(())
     }
@@ -249,14 +200,6 @@ impl App {
     fn uniform_location(shader_program: GLuint, name: &str) -> Result<GLint> {
         let name: CString = CString::new(name.as_bytes())?;
         unsafe { Ok(gl::GetUniformLocation(shader_program, name.as_ptr())) }
-    }
-
-    pub fn cleanup(&mut self) {
-        unsafe {
-            gl::DeleteBuffers(1, &self.vbo as *const u32);
-            gl::DeleteBuffers(1, &self.ebo as *const u32);
-            gl::DeleteProgram(self.shader_program);
-        }
     }
 
     fn update_free_camera(&mut self, window: &Window) -> Result<()> {
@@ -288,5 +231,14 @@ impl App {
         window.set_cursor_position(PhysicalPosition::new(center.x, center.y))?;
 
         Ok(())
+    }
+}
+
+impl Drop for App {
+    fn drop(&mut self) {
+        unsafe {
+            gl::DeleteProgram(self.shader_program);
+            gl::DeleteTextures(1, &self.atlas);
+        }
     }
 }

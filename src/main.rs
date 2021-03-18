@@ -8,9 +8,9 @@ use glutin::{
 
 mod app;
 mod camera;
+mod cube;
 mod input;
 mod system;
-mod texture;
 
 use app::App;
 
@@ -47,7 +47,6 @@ fn main() -> Result<()> {
                     gl_window.swap_buffers()?
                 }
                 Event::LoopDestroyed => {
-                    app.cleanup();
                     return Ok(());
                 }
                 Event::WindowEvent { event, .. } => match event {
