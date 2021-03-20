@@ -70,7 +70,7 @@ impl App {
             gl::ClearBufferfv(gl::COLOR, 0, background_color as *const f32);
             gl::ClearBufferfv(gl::DEPTH, 0, &[1.0 as GLfloat] as *const f32);
 
-            self.block.draw(Block::DirtWithGrass)?;
+            self.block.draw(Block::Thistle)?;
         }
         Ok(())
     }

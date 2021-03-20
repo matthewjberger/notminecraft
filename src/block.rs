@@ -12,6 +12,7 @@ pub struct BlockConfiguration {
     pub back: i32,
     pub top: i32,
     pub bottom: i32,
+    pub is_entity: bool,
 }
 
 impl BlockConfiguration {
@@ -23,6 +24,7 @@ impl BlockConfiguration {
             back: back as _,
             top: top as _,
             bottom: bottom as _,
+            is_entity: false,
         }
     }
 
@@ -35,6 +37,7 @@ impl BlockConfiguration {
             back: id,
             top: id,
             bottom: id,
+            is_entity: false,
         }
     }
 
@@ -47,7 +50,15 @@ impl BlockConfiguration {
             back: sides,
             top: top as _,
             bottom: bottom as _,
+            is_entity: false,
         }
+    }
+
+    pub fn new_entity(tile: Tile) -> Self {
+        let mut config = Self::default();
+        config.front = tile as _;
+        config.is_entity = true;
+        config
     }
 }
 pub enum Tile {
@@ -62,6 +73,8 @@ pub enum Tile {
     TntSide = 62,
     TntTop,
     TntBottom,
+    Rose = 68,
+    Thistle,
 }
 
 pub enum Block {
@@ -73,6 +86,8 @@ pub enum Block {
     Tnt,
     Bedrock,
     OakPlanks,
+    Rose,
+    Thistle,
 }
 
 impl Block {
@@ -91,6 +106,8 @@ impl Block {
             }
             Block::Bedrock => BlockConfiguration::new_single(Tile::Bedrock),
             Block::OakPlanks => BlockConfiguration::new_single(Tile::OakPlanks),
+            Block::Rose => BlockConfiguration::new_entity(Tile::Rose),
+            Block::Thistle => BlockConfiguration::new_entity(Tile::Thistle),
             _ => BlockConfiguration::default(),
         }
     }
@@ -343,36 +360,55 @@ impl Cube {
         gl::ActiveTexture(gl::TEXTURE0);
         gl::BindTexture(gl::TEXTURE_2D_ARRAY, self.atlas);
 
-        let location = Self::uniform_location(self.shader_program, "mvp")?;
-        gl::UniformMatrix4fv(location, 1, gl::FALSE, self.mvp.as_ptr());
-
-        let location = Self::uniform_location(self.shader_program, "blockId")?;
+        let mvp_location = Self::uniform_location(self.shader_program, "mvp")?;
+        let id_location = Self::uniform_location(self.shader_program, "blockId")?;
 
         gl::BindVertexArray(self.vao);
 
-        // back
-        gl::Uniform1i(location, configuration.back);
-        gl::DrawArrays(gl::TRIANGLES, 0, 6);
+        gl::UniformMatrix4fv(mvp_location, 1, gl::FALSE, self.mvp.as_ptr());
 
-        // front
-        gl::Uniform1i(location, configuration.front);
-        gl::DrawArrays(gl::TRIANGLES, 6, 6);
+        if configuration.is_entity {
+            // center the quad
+            let mvp = glm::translate(&self.mvp, &glm::vec3(0.0, 0.0, -0.5));
+            gl::UniformMatrix4fv(mvp_location, 1, gl::FALSE, mvp.as_ptr());
 
-        // left
-        gl::Uniform1i(location, configuration.left);
-        gl::DrawArrays(gl::TRIANGLES, 12, 6);
+            // front
+            gl::Uniform1i(id_location, configuration.front);
+            gl::DrawArrays(gl::TRIANGLES, 6, 6);
 
-        // right
-        gl::Uniform1i(location, configuration.right);
-        gl::DrawArrays(gl::TRIANGLES, 18, 6);
+            // rotate and draw the quad
+            let mvp = glm::rotate(&self.mvp, -90_f32.to_radians(), &glm::Vec3::y());
+            let mvp = glm::translate(&mvp, &glm::vec3(0.0, 0.0, -0.5));
+            gl::UniformMatrix4fv(mvp_location, 1, gl::FALSE, mvp.as_ptr());
 
-        // bottom
-        gl::Uniform1i(location, configuration.bottom);
-        gl::DrawArrays(gl::TRIANGLES, 24, 6);
+            gl::DrawArrays(gl::TRIANGLES, 6, 6);
+        } else {
+            gl::UniformMatrix4fv(mvp_location, 1, gl::FALSE, self.mvp.as_ptr());
 
-        // top
-        gl::Uniform1i(location, configuration.top);
-        gl::DrawArrays(gl::TRIANGLES, 30, 6);
+            // back
+            gl::Uniform1i(id_location, configuration.back);
+            gl::DrawArrays(gl::TRIANGLES, 0, 6);
+
+            // front
+            gl::Uniform1i(id_location, configuration.front);
+            gl::DrawArrays(gl::TRIANGLES, 6, 6);
+
+            // left
+            gl::Uniform1i(id_location, configuration.left);
+            gl::DrawArrays(gl::TRIANGLES, 12, 6);
+
+            // right
+            gl::Uniform1i(id_location, configuration.right);
+            gl::DrawArrays(gl::TRIANGLES, 18, 6);
+
+            // bottom
+            gl::Uniform1i(id_location, configuration.bottom);
+            gl::DrawArrays(gl::TRIANGLES, 24, 6);
+
+            // top
+            gl::Uniform1i(id_location, configuration.top);
+            gl::DrawArrays(gl::TRIANGLES, 30, 6);
+        }
 
         Ok(())
     }

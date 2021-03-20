@@ -12,4 +12,7 @@ void main()
   vec2 texCoord = uv;
   texCoord.y *= -1.0;
   outColor = texture(tex, vec3(texCoord, blockId));
+  if (outColor.a == 0.0) {
+    discard;
+  }
 }
