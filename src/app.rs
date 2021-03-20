@@ -8,14 +8,14 @@ use glutin::{
 use nalgebra_glm as glm;
 
 use crate::{
-    block::Block,
+    block::Cube,
     camera::{CameraDirection, FreeCamera},
     input::Input,
     system::System,
 };
 
 pub struct App {
-    block: Block,
+    block: Cube,
     camera: FreeCamera,
     pub system: System,
     pub input: Input,
@@ -24,7 +24,7 @@ pub struct App {
 impl App {
     pub fn new(dimensions: [u32; 2]) -> Result<Self> {
         Ok(Self {
-            block: Block::new()?,
+            block: Cube::new()?,
             camera: FreeCamera::default(),
             system: System::new(dimensions),
             input: Input::default(),
