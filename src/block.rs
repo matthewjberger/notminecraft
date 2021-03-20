@@ -4,6 +4,98 @@ use image::{EncodableLayout, GenericImageView};
 use nalgebra_glm as glm;
 use std::{ffi::CString, fs};
 
+#[derive(Default, Debug)]
+pub struct BlockConfiguration {
+    pub left: i32,
+    pub right: i32,
+    pub front: i32,
+    pub back: i32,
+    pub top: i32,
+    pub bottom: i32,
+}
+
+impl BlockConfiguration {
+    pub fn new(left: Tile, right: Tile, front: Tile, back: Tile, top: Tile, bottom: Tile) -> Self {
+        Self {
+            left: left as _,
+            right: right as _,
+            front: front as _,
+            back: back as _,
+            top: top as _,
+            bottom: bottom as _,
+        }
+    }
+
+    pub fn new_single(id: Tile) -> Self {
+        let id = id as i32;
+        Self {
+            left: id,
+            right: id,
+            front: id,
+            back: id,
+            top: id,
+            bottom: id,
+        }
+    }
+
+    pub fn new_same_sides(sides: Tile, top: Tile, bottom: Tile) -> Self {
+        let sides = sides as i32;
+        Self {
+            left: sides,
+            right: sides,
+            front: sides,
+            back: sides,
+            top: top as _,
+            bottom: bottom as _,
+        }
+    }
+}
+pub enum Tile {
+    Gravel,
+    DirtSnowSide,
+    Grass,
+    DirtGrassSide,
+    Cobblestone = 26,
+    Bedrock = 32,
+    Dirt = 50,
+    OakPlanks = 53,
+    TntSide = 62,
+    TntTop,
+    TntBottom,
+}
+
+pub enum Block {
+    Gravel,
+    Grass,
+    DirtWithGrass,
+    Dirt,
+    Cobblestone,
+    Tnt,
+    Bedrock,
+    OakPlanks,
+}
+
+impl Block {
+    // TODO: Make this generate a dictionary instead
+    fn configuration(&self) -> BlockConfiguration {
+        match *self {
+            Block::Gravel => BlockConfiguration::new_single(Tile::Gravel),
+            Block::Grass => BlockConfiguration::new_single(Tile::Grass),
+            Block::Dirt => BlockConfiguration::new_single(Tile::Dirt),
+            Block::DirtWithGrass => {
+                BlockConfiguration::new_same_sides(Tile::DirtGrassSide, Tile::Grass, Tile::Dirt)
+            }
+            Block::Cobblestone => BlockConfiguration::new_single(Tile::Cobblestone),
+            Block::Tnt => {
+                BlockConfiguration::new_same_sides(Tile::TntSide, Tile::TntTop, Tile::TntBottom)
+            }
+            Block::Bedrock => BlockConfiguration::new_single(Tile::Bedrock),
+            Block::OakPlanks => BlockConfiguration::new_single(Tile::OakPlanks),
+            _ => BlockConfiguration::default(),
+        }
+    }
+}
+
 #[rustfmt::skip]
 pub const VERTICES: &[f32; 180] =
     &[
@@ -243,7 +335,9 @@ impl Cube {
         Ok(atlas)
     }
 
-    pub unsafe fn draw(&self) -> Result<()> {
+    pub unsafe fn draw(&self, block: Block) -> Result<()> {
+        let configuration = block.configuration();
+
         gl::UseProgram(self.shader_program);
 
         gl::ActiveTexture(gl::TEXTURE0);
@@ -257,27 +351,27 @@ impl Cube {
         gl::BindVertexArray(self.vao);
 
         // back
-        gl::Uniform1i(location, 62);
+        gl::Uniform1i(location, configuration.back);
         gl::DrawArrays(gl::TRIANGLES, 0, 6);
 
         // front
-        gl::Uniform1i(location, 62);
+        gl::Uniform1i(location, configuration.front);
         gl::DrawArrays(gl::TRIANGLES, 6, 6);
 
         // left
-        gl::Uniform1i(location, 62);
+        gl::Uniform1i(location, configuration.left);
         gl::DrawArrays(gl::TRIANGLES, 12, 6);
 
         // right
-        gl::Uniform1i(location, 62);
+        gl::Uniform1i(location, configuration.right);
         gl::DrawArrays(gl::TRIANGLES, 18, 6);
 
         // bottom
-        gl::Uniform1i(location, 64);
+        gl::Uniform1i(location, configuration.bottom);
         gl::DrawArrays(gl::TRIANGLES, 24, 6);
 
         // top
-        gl::Uniform1i(location, 63);
+        gl::Uniform1i(location, configuration.top);
         gl::DrawArrays(gl::TRIANGLES, 30, 6);
 
         Ok(())
