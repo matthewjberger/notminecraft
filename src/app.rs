@@ -8,13 +8,14 @@ use glutin::{
 use nalgebra_glm as glm;
 
 use crate::{
-    block::{Block, Cube},
+    block::{Cube, World},
     camera::{CameraDirection, FreeCamera},
     input::Input,
     system::System,
 };
 
 pub struct App {
+    world: World,
     block: Cube,
     camera: FreeCamera,
     pub system: System,
@@ -23,7 +24,9 @@ pub struct App {
 
 impl App {
     pub fn new(dimensions: [u32; 2]) -> Result<Self> {
+        // Self::enable_wireframe();
         Ok(Self {
+            world: World::new(),
             block: Cube::new()?,
             camera: FreeCamera::default(),
             system: System::new(dimensions),
@@ -70,7 +73,7 @@ impl App {
             gl::ClearBufferfv(gl::COLOR, 0, background_color as *const f32);
             gl::ClearBufferfv(gl::DEPTH, 0, &[1.0 as GLfloat] as *const f32);
 
-            self.block.draw(Block::Thistle)?;
+            self.block.draw_world(&self.world)?;
         }
         Ok(())
     }

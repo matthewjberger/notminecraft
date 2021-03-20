@@ -4,7 +4,48 @@ use image::{EncodableLayout, GenericImageView};
 use nalgebra_glm as glm;
 use std::{ffi::CString, fs};
 
-#[derive(Default, Debug)]
+const CHUNK_WIDTH: usize = 4;
+const CHUNK_LENGTH: usize = 4;
+const CHUNK_DEPTH: usize = 8;
+const WORLD_WIDTH: usize = 4;
+const WORLD_LENGTH: usize = 4;
+
+pub struct World {
+    pub chunks: Vec<Vec<Chunk>>,
+}
+
+impl World {
+    pub fn new() -> Self {
+        let mut chunks = Vec::new();
+        for y in 0..WORLD_LENGTH {
+            let mut chunks_x = Vec::new();
+            for x in 0..WORLD_WIDTH {
+                let mut chunk = Chunk::default();
+                chunk.position = glm::vec3((x * CHUNK_WIDTH) as f32, (y * CHUNK_LENGTH) as _, 0.0);
+                chunks_x.push(chunk);
+            }
+            chunks.push(chunks_x);
+        }
+        Self { chunks }
+    }
+}
+
+pub struct Chunk {
+    pub position: glm::Vec3,
+    pub blocks: [[[Block; CHUNK_DEPTH]; CHUNK_LENGTH]; CHUNK_WIDTH],
+}
+
+impl Default for Chunk {
+    fn default() -> Self {
+        let blocks = [[[Block::default(); CHUNK_DEPTH]; CHUNK_LENGTH]; CHUNK_WIDTH];
+        Self {
+            position: glm::vec3(0.0, 0.0, 0.0),
+            blocks,
+        }
+    }
+}
+
+#[derive(Default)]
 pub struct BlockConfiguration {
     pub left: i32,
     pub right: i32,
@@ -13,9 +54,23 @@ pub struct BlockConfiguration {
     pub top: i32,
     pub bottom: i32,
     pub is_entity: bool,
+    pub is_solid: bool,
 }
 
 impl BlockConfiguration {
+    pub fn empty() -> Self {
+        Self {
+            left: Tile::Air as _,
+            right: Tile::Air as _,
+            front: Tile::Air as _,
+            back: Tile::Air as _,
+            top: Tile::Air as _,
+            bottom: Tile::Air as _,
+            is_entity: false,
+            is_solid: false,
+        }
+    }
+
     pub fn new(left: Tile, right: Tile, front: Tile, back: Tile, top: Tile, bottom: Tile) -> Self {
         Self {
             left: left as _,
@@ -25,6 +80,7 @@ impl BlockConfiguration {
             top: top as _,
             bottom: bottom as _,
             is_entity: false,
+            is_solid: true,
         }
     }
 
@@ -38,6 +94,7 @@ impl BlockConfiguration {
             top: id,
             bottom: id,
             is_entity: false,
+            is_solid: true,
         }
     }
 
@@ -51,6 +108,7 @@ impl BlockConfiguration {
             top: top as _,
             bottom: bottom as _,
             is_entity: false,
+            is_solid: true,
         }
     }
 
@@ -58,10 +116,12 @@ impl BlockConfiguration {
         let mut config = Self::default();
         config.front = tile as _;
         config.is_entity = true;
+        config.is_solid = false;
         config
     }
 }
 pub enum Tile {
+    Air = -1,
     Gravel,
     DirtSnowSide,
     Grass,
@@ -77,7 +137,9 @@ pub enum Tile {
     Thistle,
 }
 
+#[derive(PartialEq, Clone, Copy)]
 pub enum Block {
+    Air,
     Gravel,
     Grass,
     DirtWithGrass,
@@ -90,10 +152,17 @@ pub enum Block {
     Thistle,
 }
 
+impl Default for Block {
+    fn default() -> Self {
+        Self::Dirt
+    }
+}
+
 impl Block {
     // TODO: Make this generate a dictionary instead
     fn configuration(&self) -> BlockConfiguration {
         match *self {
+            Block::Air => BlockConfiguration::default(),
             Block::Gravel => BlockConfiguration::new_single(Tile::Gravel),
             Block::Grass => BlockConfiguration::new_single(Tile::Grass),
             Block::Dirt => BlockConfiguration::new_single(Tile::Dirt),
@@ -352,64 +421,138 @@ impl Cube {
         Ok(atlas)
     }
 
-    pub unsafe fn draw(&self, block: Block) -> Result<()> {
-        let configuration = block.configuration();
+    pub unsafe fn draw_world(&self, world: &World) -> Result<()> {
+        for (row_index, row) in world.chunks.iter().enumerate() {
+            for (column_index, chunk) in row.iter().enumerate() {
+                for x in 0..CHUNK_WIDTH {
+                    for z in 0..CHUNK_LENGTH {
+                        for y in 0..CHUNK_DEPTH {
+                            let block = &chunk.blocks[x][z][y];
 
-        gl::UseProgram(self.shader_program);
+                            if Block::Air == *block {
+                                return Ok(());
+                            }
 
-        gl::ActiveTexture(gl::TEXTURE0);
-        gl::BindTexture(gl::TEXTURE_2D_ARRAY, self.atlas);
+                            let configuration = block.configuration();
 
-        let mvp_location = Self::uniform_location(self.shader_program, "mvp")?;
-        let id_location = Self::uniform_location(self.shader_program, "blockId")?;
+                            gl::UseProgram(self.shader_program);
 
-        gl::BindVertexArray(self.vao);
+                            gl::ActiveTexture(gl::TEXTURE0);
+                            gl::BindTexture(gl::TEXTURE_2D_ARRAY, self.atlas);
 
-        gl::UniformMatrix4fv(mvp_location, 1, gl::FALSE, self.mvp.as_ptr());
+                            let mvp_location = Self::uniform_location(self.shader_program, "mvp")?;
+                            let id_location =
+                                Self::uniform_location(self.shader_program, "blockId")?;
 
-        if configuration.is_entity {
-            // center the quad
-            let mvp = glm::translate(&self.mvp, &glm::vec3(0.0, 0.0, -0.5));
-            gl::UniformMatrix4fv(mvp_location, 1, gl::FALSE, mvp.as_ptr());
+                            gl::BindVertexArray(self.vao);
 
-            // front
-            gl::Uniform1i(id_location, configuration.front);
-            gl::DrawArrays(gl::TRIANGLES, 6, 6);
+                            let mvp = glm::translate(&self.mvp, &chunk.position);
+                            let mvp = glm::translate(&mvp, &glm::vec3(x as _, y as _, z as _));
+                            gl::UniformMatrix4fv(mvp_location, 1, gl::FALSE, mvp.as_ptr());
 
-            // rotate and draw the quad
-            let mvp = glm::rotate(&self.mvp, -90_f32.to_radians(), &glm::Vec3::y());
-            let mvp = glm::translate(&mvp, &glm::vec3(0.0, 0.0, -0.5));
-            gl::UniformMatrix4fv(mvp_location, 1, gl::FALSE, mvp.as_ptr());
+                            if configuration.is_entity {
+                                // center the quad
+                                let mvp = glm::translate(&mvp, &glm::vec3(0.0, 0.0, -0.5));
+                                gl::UniformMatrix4fv(mvp_location, 1, gl::FALSE, mvp.as_ptr());
 
-            gl::DrawArrays(gl::TRIANGLES, 6, 6);
-        } else {
-            gl::UniformMatrix4fv(mvp_location, 1, gl::FALSE, self.mvp.as_ptr());
+                                // front
+                                gl::Uniform1i(id_location, configuration.front);
+                                gl::DrawArrays(gl::TRIANGLES, 6, 6);
 
-            // back
-            gl::Uniform1i(id_location, configuration.back);
-            gl::DrawArrays(gl::TRIANGLES, 0, 6);
+                                // rotate and draw the quad
+                                let mvp = glm::rotate(&mvp, -90_f32.to_radians(), &glm::Vec3::y());
+                                let mvp = glm::translate(&mvp, &glm::vec3(0.0, 0.0, -0.5));
+                                gl::UniformMatrix4fv(mvp_location, 1, gl::FALSE, mvp.as_ptr());
 
-            // front
-            gl::Uniform1i(id_location, configuration.front);
-            gl::DrawArrays(gl::TRIANGLES, 6, 6);
+                                gl::DrawArrays(gl::TRIANGLES, 6, 6);
+                            } else {
+                                gl::UniformMatrix4fv(mvp_location, 1, gl::FALSE, mvp.as_ptr());
 
-            // left
-            gl::Uniform1i(id_location, configuration.left);
-            gl::DrawArrays(gl::TRIANGLES, 12, 6);
+                                // TODO: This doesn't handle checking for solids across chunk borders
 
-            // right
-            gl::Uniform1i(id_location, configuration.right);
-            gl::DrawArrays(gl::TRIANGLES, 18, 6);
+                                // back
+                                let should_render =
+                                    if let Some(neighbor) = chunk.blocks[x].get(z - 1) {
+                                        !neighbor[y].configuration().is_solid
+                                    } else {
+                                        true
+                                    };
 
-            // bottom
-            gl::Uniform1i(id_location, configuration.bottom);
-            gl::DrawArrays(gl::TRIANGLES, 24, 6);
+                                if should_render {
+                                    gl::Uniform1i(id_location, configuration.back);
+                                    gl::DrawArrays(gl::TRIANGLES, 0, 6);
+                                }
 
-            // top
-            gl::Uniform1i(id_location, configuration.top);
-            gl::DrawArrays(gl::TRIANGLES, 30, 6);
+                                // front
+                                let should_render =
+                                    if let Some(neighbor) = chunk.blocks[x].get(z + 1) {
+                                        !neighbor[y].configuration().is_solid
+                                    } else {
+                                        true
+                                    };
+
+                                if should_render {
+                                    gl::Uniform1i(id_location, configuration.front);
+                                    gl::DrawArrays(gl::TRIANGLES, 6, 6);
+                                }
+
+                                // left
+                                let should_render = if let Some(neighbor) = chunk.blocks.get(x - 1)
+                                {
+                                    !neighbor[z][y].configuration().is_solid
+                                } else {
+                                    true
+                                };
+
+                                if should_render {
+                                    gl::Uniform1i(id_location, configuration.left);
+                                    gl::DrawArrays(gl::TRIANGLES, 12, 6);
+                                }
+
+                                // right
+                                let should_render = if let Some(neighbor) = chunk.blocks.get(x + 1)
+                                {
+                                    !neighbor[z][y].configuration().is_solid
+                                } else {
+                                    true
+                                };
+
+                                if should_render {
+                                    gl::Uniform1i(id_location, configuration.right);
+                                    gl::DrawArrays(gl::TRIANGLES, 18, 6);
+                                }
+
+                                // bottom
+                                let should_render =
+                                    if let Some(neighbor) = chunk.blocks[x][z].get(y - 1) {
+                                        !neighbor.configuration().is_solid
+                                    } else {
+                                        true
+                                    };
+
+                                if should_render {
+                                    gl::Uniform1i(id_location, configuration.bottom);
+                                    gl::DrawArrays(gl::TRIANGLES, 24, 6);
+                                }
+
+                                // top
+                                let should_render =
+                                    if let Some(neighbor) = chunk.blocks[x][z].get(y + 1) {
+                                        !neighbor.configuration().is_solid
+                                    } else {
+                                        true
+                                    };
+
+                                if should_render {
+                                    gl::Uniform1i(id_location, configuration.top);
+                                    gl::DrawArrays(gl::TRIANGLES, 30, 6);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
-
         Ok(())
     }
 
