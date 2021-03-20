@@ -177,34 +177,67 @@ impl Cube {
     }
 
     fn create_atlas() -> Result<GLuint> {
-        let img_ = image::open("assets/textures/atlas.png")?;
-
-        let row = 0;
-        let column = 22;
-        let dimension = 16;
-        let img = img_
-            .view(column * dimension, row * dimension, dimension, dimension)
-            .to_image();
+        let atlas_image = image::open("assets/textures/atlas.png")?;
 
         let mut atlas = 0;
         unsafe {
             gl::GenTextures(1, &mut atlas);
             gl::ActiveTexture(gl::TEXTURE0);
-            gl::BindTexture(gl::TEXTURE_2D, atlas);
-            gl::TexImage2D(
-                gl::TEXTURE_2D,
+            gl::BindTexture(gl::TEXTURE_2D_ARRAY, atlas);
+
+            let dimension = 16;
+            let columns = atlas_image.width() / dimension;
+            let rows = atlas_image.height() / dimension;
+            let number_of_tiles = rows * columns;
+
+            gl::TexImage3D(
+                gl::TEXTURE_2D_ARRAY,
                 0,
                 gl::RGBA as _,
-                img.width() as _,
-                img.height() as _,
+                dimension as _,
+                dimension as _,
+                number_of_tiles as _,
                 0,
                 gl::RGBA,
                 gl::UNSIGNED_BYTE,
-                img.as_bytes().as_ptr() as *const GLvoid,
+                std::ptr::null() as *const GLvoid,
             );
-            gl::GenerateMipmap(atlas);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
+
+            for row in 0..rows {
+                let y = row * dimension;
+                for column in 0..columns {
+                    let x = column * dimension;
+                    let pixels = atlas_image.view(x, y, dimension, dimension).to_image();
+                    let pixel_bytes = pixels.as_bytes();
+                    let tile = (row * columns) + column;
+                    gl::TexSubImage3D(
+                        gl::TEXTURE_2D_ARRAY,
+                        0,
+                        0,
+                        0,
+                        tile as _,
+                        dimension as _,
+                        dimension as _,
+                        1,
+                        gl::RGBA,
+                        gl::UNSIGNED_BYTE,
+                        pixel_bytes.as_ptr() as *const GLvoid,
+                    );
+                }
+            }
+
+            gl::GenerateMipmap(gl::TEXTURE_2D_ARRAY);
+
+            gl::TexParameterf(
+                gl::TEXTURE_2D_ARRAY,
+                gl::TEXTURE_MAG_FILTER,
+                gl::NEAREST as _,
+            );
+            gl::TexParameterf(
+                gl::TEXTURE_2D_ARRAY,
+                gl::TEXTURE_MIN_FILTER,
+                gl::NEAREST as _,
+            );
         }
 
         Ok(atlas)
@@ -214,29 +247,37 @@ impl Cube {
         gl::UseProgram(self.shader_program);
 
         gl::ActiveTexture(gl::TEXTURE0);
-        gl::BindTexture(gl::TEXTURE_2D, self.atlas);
+        gl::BindTexture(gl::TEXTURE_2D_ARRAY, self.atlas);
 
         let location = Self::uniform_location(self.shader_program, "mvp")?;
         gl::UniformMatrix4fv(location, 1, gl::FALSE, self.mvp.as_ptr());
 
+        let location = Self::uniform_location(self.shader_program, "blockId")?;
+
         gl::BindVertexArray(self.vao);
 
         // back
+        gl::Uniform1i(location, 62);
         gl::DrawArrays(gl::TRIANGLES, 0, 6);
 
         // front
+        gl::Uniform1i(location, 62);
         gl::DrawArrays(gl::TRIANGLES, 6, 6);
 
         // left
+        gl::Uniform1i(location, 62);
         gl::DrawArrays(gl::TRIANGLES, 12, 6);
 
         // right
+        gl::Uniform1i(location, 62);
         gl::DrawArrays(gl::TRIANGLES, 18, 6);
 
         // bottom
+        gl::Uniform1i(location, 64);
         gl::DrawArrays(gl::TRIANGLES, 24, 6);
 
         // top
+        gl::Uniform1i(location, 63);
         gl::DrawArrays(gl::TRIANGLES, 30, 6);
 
         Ok(())

@@ -56,8 +56,8 @@ impl FreeCamera {
             CameraDirection::Backward => self.position -= self.front * velocity,
             CameraDirection::Left => self.position -= self.right * velocity,
             CameraDirection::Right => self.position += self.right * velocity,
-            CameraDirection::Up => self.position -= self.up * velocity,
-            CameraDirection::Down => self.position += self.up * velocity,
+            CameraDirection::Up => self.position += self.up * velocity,
+            CameraDirection::Down => self.position -= self.up * velocity,
         };
     }
 
