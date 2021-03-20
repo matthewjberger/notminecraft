@@ -56,7 +56,7 @@ pub const VERTICES: &[f32; 180] =
        -0.5,  0.5, -0.5,  0.0, 1.0
     ];
 
-pub struct Cube {
+pub struct Block {
     vao: GLuint,
     vbo: GLuint,
     shader_program: GLuint,
@@ -64,7 +64,7 @@ pub struct Cube {
     pub mvp: glm::Mat4,
 }
 
-impl Cube {
+impl Block {
     pub fn new() -> Result<Self> {
         Ok(Self {
             vao: Self::create_vao(),
@@ -289,7 +289,7 @@ impl Cube {
     }
 }
 
-impl Drop for Cube {
+impl Drop for Block {
     fn drop(&mut self) {
         unsafe {
             gl::DeleteBuffers(1, &self.vbo);

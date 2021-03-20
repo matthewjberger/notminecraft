@@ -7,8 +7,8 @@ use glutin::{
 };
 
 mod app;
+mod block;
 mod camera;
-mod cube;
 mod input;
 mod system;
 

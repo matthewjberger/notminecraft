@@ -8,14 +8,14 @@ use glutin::{
 use nalgebra_glm as glm;
 
 use crate::{
+    block::Block,
     camera::{CameraDirection, FreeCamera},
-    cube::Cube,
     input::Input,
     system::System,
 };
 
 pub struct App {
-    cube: Cube,
+    block: Block,
     camera: FreeCamera,
     pub system: System,
     pub input: Input,
@@ -24,7 +24,7 @@ pub struct App {
 impl App {
     pub fn new(dimensions: [u32; 2]) -> Result<Self> {
         Ok(Self {
-            cube: Cube::new()?,
+            block: Block::new()?,
             camera: FreeCamera::default(),
             system: System::new(dimensions),
             input: Input::default(),
@@ -52,7 +52,7 @@ impl App {
             1000.0,
         );
         let model = glm::Mat4::identity();
-        self.cube.mvp = perspective * self.camera.view_matrix() * model;
+        self.block.mvp = perspective * self.camera.view_matrix() * model;
         Ok(())
     }
 
@@ -70,7 +70,7 @@ impl App {
             gl::ClearBufferfv(gl::COLOR, 0, background_color as *const f32);
             gl::ClearBufferfv(gl::DEPTH, 0, &[1.0 as GLfloat] as *const f32);
 
-            self.cube.draw()?;
+            self.block.draw()?;
         }
         Ok(())
     }
